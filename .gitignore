@@ -1,36 +1,7 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-
-# Virtual environment
-venv/
+node_modules/
 .venv/
-
-# Streamlit secrets (legacy)
-.streamlit/secrets.toml
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Backend
-backend/.env
-backend/veriattend.db
-backend/test_veriattend.db
-*.db
-
-# Frontend
-frontend/node_modules/
-frontend/dist/
-
-# Gemini
-.gemini/
-.agents/
+venv/
+__pycache__/
+.env
+*.pyc
+dist/
