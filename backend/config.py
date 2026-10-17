@@ -47,7 +47,10 @@ class Settings(BaseSettings):
     # HIGH: auto-approve attendance
     # BORDERLINE: send to manual review
     # LOW: reject
-    CONFIDENCE_HIGH_THRESHOLD: float = 0.80
+    # 75% is the auto-approval floor used by the student attendance flow.
+    # Scores are still calculated from the actual face-embedding distance;
+    # this setting never increases or fabricates a recognition score.
+    CONFIDENCE_HIGH_THRESHOLD: float = 0.75
     CONFIDENCE_BORDERLINE_THRESHOLD: float = 0.55
 
     # ── Liveness Verification ──

@@ -25,6 +25,7 @@ export default function StudentRegister() {
   });
   const [studentId, setStudentId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -42,7 +43,7 @@ export default function StudentRegister() {
       setStudentId(res.data.student_id);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed.');
+      setError(err.response?.data?.detail || 'Cannot contact the backend. Start the backend terminal, then refresh this page.');
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ export default function StudentRegister() {
       setSuccess('Registration complete! Face enrolled successfully.');
       setStep(3);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Face enrollment failed. Please try again.');
+      setError(err.response?.data?.detail || 'Cannot contact the backend. Start the backend terminal, then refresh this page.');
     } finally {
       setLoading(false);
     }
@@ -129,15 +130,19 @@ export default function StudentRegister() {
               <div className="grid-2 mb-2">
                 <div className="input-group">
                   <label className="input-group__label">Account Password *</label>
-                  <input className="input" type="password" required minLength="4" value={form.password}
+                  <input className="input" type={showPasswords ? 'text' : 'password'} required minLength="4" value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })} />
                 </div>
                 <div className="input-group">
                   <label className="input-group__label">Confirm Password *</label>
-                  <input className="input" type="password" required minLength="4" value={form.confirmPassword}
+                  <input className="input" type={showPasswords ? 'text' : 'password'} required minLength="4" value={form.confirmPassword}
                     onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} />
                 </div>
               </div>
+              <label className="text-sm text-muted flex gap-1" style={{ alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showPasswords} onChange={(e) => setShowPasswords(e.target.checked)} />
+                Show passwords while typing
+              </label>
               <button type="submit" className="btn btn--primary btn--full btn--lg mt-2" disabled={loading} id="btn-register-student">
                 {loading ? 'Registering...' : 'Continue to Face Enrollment →'}
               </button>

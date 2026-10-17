@@ -13,6 +13,7 @@ export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [form, setForm] = useState({ username: '', password: '', name: '' });
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -38,7 +39,7 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Something went wrong.');
+      setError(err.response?.data?.detail || 'Cannot contact the backend. Start the backend terminal, then refresh this page.');
     } finally {
       setLoading(false);
     }
@@ -108,15 +109,21 @@ export default function Login() {
 
           <div className="input-group mb-3">
             <label className="input-group__label">Password</label>
-            <input
-              className="input"
-              type="password"
-              placeholder="Enter password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              id="input-password"
-            />
+            <div className="flex gap-1" style={{ alignItems: 'center' }}>
+              <input
+                className="input"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+                id="input-password"
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="btn btn--secondary btn--sm" onClick={() => setShowPassword(!showPassword)}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
 
           <button

@@ -64,8 +64,11 @@ export const studentsAPI = {
   update: (id, data) => api.put(`/students/${id}`, data),
   enrollFace: (id, frameData) =>
     api.post(`/students/${id}/enroll-face`, { student_id: id, frame_data: frameData }),
+  removeFace: (id, subjectId) => api.delete(`/students/${id}/face`, { params: { subject_id: subjectId } }),
   login: (data) => api.post('/students/login', data),
   me: (config = {}) => api.get('/students/me', config),
+  monthlyAttendance: (month, config = {}) =>
+    api.get('/students/me/attendance', { ...config, params: { month } }),
   deregister: (data, config = {}) => api.delete('/students/me', { ...config, data }),
 };
 
@@ -121,6 +124,7 @@ export const adminAPI = {
   dashboard: () => api.get('/admin/dashboard'),
   createSubject: (data) => api.post('/admin/subjects', data),
   listSubjects: () => api.get('/admin/subjects'),
+  listStudents: () => api.get('/admin/students'),
   getAttendance: (params) => api.get('/admin/attendance', { params }),
 };
 

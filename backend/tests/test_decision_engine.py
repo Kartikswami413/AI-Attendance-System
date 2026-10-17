@@ -141,8 +141,8 @@ def test_successful_recognition():
 
 # ── Test 9: High Confidence Attendance ──
 def test_high_confidence_auto_approved():
-    """Confidence >= 0.80 should be auto-approved."""
-    inp = _make_input(confidence=0.85)
+    """Confidence >= 0.75 should be auto-approved."""
+    inp = _make_input(confidence=0.75)
     result = make_attendance_decision(inp)
     assert result["decision"] == "APPROVED"
     assert "auto-approved" in result["reason"].lower() or "auto" in result["reason"].lower()
@@ -150,7 +150,7 @@ def test_high_confidence_auto_approved():
 
 # ── Test 10: Borderline Confidence ──
 def test_borderline_confidence_manual_review():
-    """Confidence between 0.55 and 0.80 should go to manual review."""
+    """Confidence between 0.55 and 0.75 should go to manual review."""
     inp = _make_input(confidence=0.65)
     result = make_attendance_decision(inp)
     assert result["decision"] == "MANUAL_REVIEW"
@@ -170,13 +170,15 @@ def test_low_confidence_rejected():
 def test_duplicate_attendance():
     """Should return DUPLICATE when student already marked in session."""
     from datetime import datetime, timedelta
-    from models.database import AttendanceSession, AttendanceRecord
+    from models.database import AttendanceSession, AttendanceRecord, SubjectStudent
 
     mock_session = MagicMock()
     mock_session.session_id = 1
+    mock_session.subject_id = 1
     mock_session.is_active = True
-    mock_session.start_time = datetime.utcnow() - timedelta(hours=1)
-    mock_session.end_time = datetime.utcnow() + timedelta(hours=1)
+    # Deliberately broad window so this unit test is independent of the host clock.
+    mock_session.start_time = datetime(2000, 1, 1)
+    mock_session.end_time = datetime(2100, 1, 1)
 
     mock_record = MagicMock()
     mock_record.attendance_id = 99
@@ -186,6 +188,8 @@ def test_duplicate_attendance():
         def query(self, model, *args, **kwargs):
             if model is AttendanceSession:
                 return self._SessionQuery()
+            if model is SubjectStudent:
+                return self._EnrollmentQuery()
             return self._RecordQuery()
 
         class _SessionQuery:
@@ -193,6 +197,12 @@ def test_duplicate_attendance():
                 return self
             def first(self_inner):
                 return mock_session
+
+        class _EnrollmentQuery:
+            def filter(self, *a, **kw):
+                return self
+            def first(self_inner):
+                return MagicMock()
 
         class _RecordQuery:
             def filter(self, *a, **kw):

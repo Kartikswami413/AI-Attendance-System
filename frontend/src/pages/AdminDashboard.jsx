@@ -20,6 +20,7 @@ export default function AdminDashboard() {
   const [subjects, setSubjects] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [students, setStudents] = useState([]);
+  const [subjectRosters, setSubjectRosters] = useState({});
   const [studentToEnroll, setStudentToEnroll] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
@@ -50,13 +51,17 @@ export default function AdminDashboard() {
         adminAPI.getAttendance({ limit: 50 }),
         adminAPI.listSubjects(),
         sessionsAPI.list(),
-        studentsAPI.list(),
+        adminAPI.listStudents(),
       ]);
       setStats(statsRes.data);
       setRecords(recordsRes.data);
       setSubjects(subjectsRes.data);
       setSessions(sessionsRes.data);
       setStudents(studentsRes.data);
+      const rosterResponses = await Promise.all(
+        subjectsRes.data.map(async (subject) => [subject.subject_id, (await enrollmentAPI.getStudents(subject.subject_id)).data])
+      );
+      setSubjectRosters(Object.fromEntries(rosterResponses));
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -144,6 +149,33 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleRemoveFromClass = async (subject, student) => {
+    if (!window.confirm(`Remove ${student.name} from ${subject.name}? They will no longer be able to mark attendance for this subject.`)) return;
+    setFormError(''); setFormSuccess('');
+    try {
+      await enrollmentAPI.unenroll(student.student_id, subject.subject_id);
+      setFormSuccess(`${student.name} was removed from ${subject.name}.`);
+      loadData();
+    } catch (err) {
+      setFormError(err.response?.data?.detail || 'Could not remove the student from this subject.');
+    }
+  };
+
+  const handleEraseFace = async (subject, student) => {
+    const confirmed = window.confirm(
+      `Permanently erase ${student.name}'s enrolled face data and remove them from ${subject.name}? This cannot be undone; they must register their face again to use attendance.`
+    );
+    if (!confirmed) return;
+    setFormError(''); setFormSuccess('');
+    try {
+      await studentsAPI.removeFace(student.student_id, subject.subject_id);
+      setFormSuccess(`Face data erased and ${student.name} removed from ${subject.name}.`);
+      loadData();
+    } catch (err) {
+      setFormError(err.response?.data?.detail || 'Could not erase the face data.');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('veriattend_token');
     localStorage.removeItem('veriattend_teacher');
@@ -178,11 +210,11 @@ export default function AdminDashboard() {
       <main className="app-main">
         {/* Tabs */}
         <div className="tabs" style={{ maxWidth: 600 }}>
-          {['overview', 'attendance', 'sessions', 'subjects'].map((tab) => (
+          {['overview', 'attendance', 'sessions', 'subjects', 'students'].map((tab) => (
             <button key={tab} className={`tab ${activeTab === tab ? 'tab--active' : ''}`}
               onClick={() => setActiveTab(tab)}>
               {tab === 'overview' ? '📊 Overview' : tab === 'attendance' ? '📋 Attendance' :
-                tab === 'sessions' ? '📅 Sessions' : '📚 Subjects'}
+                tab === 'sessions' ? '📅 Sessions' : tab === 'subjects' ? '📚 Subjects' : '👥 Students'}
             </button>
           ))}
         </div>
@@ -441,11 +473,63 @@ export default function AdminDashboard() {
                         Enroll
                       </button>
                     </div>
+                    <div className="mt-2">
+                      <p className="text-sm text-muted mb-1">Class roster — administrator controls</p>
+                      {(subjectRosters[s.subject_id] || []).length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {subjectRosters[s.subject_id].map((student) => (
+                            <div key={student.student_id} className="flex gap-1" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span className="text-sm">
+                                {student.student_code} — {student.name} {!student.has_face_embedding && '(no face enrolled)'}
+                              </span>
+                              <div className="flex gap-1">
+                                <button className="btn btn--secondary btn--sm" onClick={() => handleRemoveFromClass(s, student)}>
+                                  Remove from class
+                                </button>
+                                <button className="btn btn--danger btn--sm" onClick={() => handleEraseFace(s, student)}>
+                                  Erase face
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted">No students enrolled in this subject.</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="empty-state"><div className="empty-state__icon">📚</div><div className="empty-state__title">No subjects yet</div></div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'students' && (
+          <div className="animate-in">
+            <div className="page-header"><h3>👥 Student Information</h3></div>
+            <p className="text-muted mb-2">Administrator view. Passwords and face vectors are never displayed or recoverable.</p>
+            {students.length > 0 ? (
+              <div className="table-container">
+                <table className="table">
+                  <thead><tr><th>Student ID</th><th>Name</th><th>Email</th><th>Department / Year</th><th>Face enrollment</th><th>Account</th></tr></thead>
+                  <tbody>
+                    {students.map((student) => (
+                      <tr key={student.student_id}>
+                        <td><strong>{student.student_code}</strong></td>
+                        <td>{student.name}</td>
+                        <td>{student.email || '—'}</td>
+                        <td>{student.department || '—'}{student.year ? ` / ${student.year}` : ''}</td>
+                        <td><span className={`badge ${student.has_face_embedding ? 'badge--success' : 'badge--neutral'}`}>{student.has_face_embedding ? 'Enrolled' : 'Not enrolled'}</span></td>
+                        <td><span className={`badge ${student.is_active ? 'badge--success' : 'badge--error'}`}>{student.account_status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state"><div className="empty-state__icon">👥</div><div className="empty-state__title">No students registered yet</div></div>
             )}
           </div>
         )}

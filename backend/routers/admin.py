@@ -18,11 +18,43 @@ from models.database import (
 )
 from models.schemas import (
     DashboardStats, SubjectCreateRequest, SubjectResponse,
-    AttendanceRecordResponse, SuccessResponse,
+    AttendanceRecordResponse, StudentResponse, SuccessResponse,
 )
 from services.auth import get_current_teacher
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
+
+
+@router.get(
+    "/students",
+    response_model=list[StudentResponse],
+    summary="Administrator student information",
+)
+def get_student_information(
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """Return student profile information for the administrator dashboard.
+
+    Passwords and biometric vectors are intentionally excluded. Passwords are
+    securely hashed and must never be retrievable by any user or administrator.
+    """
+    students = db.query(Student).order_by(Student.name.asc()).all()
+    return [
+        StudentResponse(
+            student_id=student.student_id,
+            student_code=student.student_code,
+            name=student.name,
+            email=student.email,
+            department=student.department,
+            year=student.year,
+            has_face_embedding=student.face_embedding is not None,
+            is_active=bool(student.is_active),
+            account_status="Active" if student.is_active else "Deregistered",
+            created_at=student.created_at,
+        )
+        for student in students
+    ]
 
 
 @router.get(

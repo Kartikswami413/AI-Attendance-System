@@ -15,16 +15,18 @@ import numpy as np
 import base64
 import cv2
 import logging
+import re
 
-from models.database import Student, SubjectStudent, get_db
+from models.database import AttendanceRecord, Student, Subject, SubjectStudent, Teacher, get_db
 from models.schemas import (
     StudentRegisterRequest, StudentResponse, StudentUpdateRequest,
     EnrollFaceRequest, EnrollFaceResponse, ErrorResponse, SuccessResponse,
     StudentLoginRequest, StudentTokenResponse, DeregisterStudentRequest,
+    AttendanceRecordResponse,
 )
 from services.face_detection import detect_faces, get_face_landmarks, compute_face_embedding
 from services.face_recognition_service import invalidate_classifier_cache
-from services.auth import hash_password, verify_password, create_access_token, get_current_student
+from services.auth import hash_password, verify_password, create_access_token, get_current_student, get_current_teacher
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,57 @@ def get_my_profile(student: Student = Depends(get_current_student)):
     return _student_response(student)
 
 
+@router.get(
+    "/me/attendance",
+    response_model=list[AttendanceRecordResponse],
+    summary="Get the signed-in student's attendance for one month",
+)
+def get_my_monthly_attendance(
+    month: str,
+    student: Student = Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Return only the caller's attendance records for ``YYYY-MM``.
+
+    A student token is required, so changing a URL or request parameter cannot
+    reveal another student's attendance history.
+    """
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+        raise HTTPException(status_code=400, detail="Month must use YYYY-MM format.")
+
+    records = (
+        db.query(AttendanceRecord)
+        .filter(
+            AttendanceRecord.student_id == student.student_id,
+            AttendanceRecord.date.like(f"{month}-%"),
+        )
+        .order_by(AttendanceRecord.date.desc(), AttendanceRecord.timestamp.desc())
+        .all()
+    )
+
+    results = []
+    for record in records:
+        subject = db.query(Subject).filter(Subject.subject_id == record.subject_id).first()
+        results.append(AttendanceRecordResponse(
+            attendance_id=record.attendance_id,
+            student_id=student.student_id,
+            student_code=student.student_code,
+            student_name=student.name,
+            subject_id=record.subject_id,
+            subject_name=subject.name if subject else "Unknown subject",
+            session_id=record.session_id,
+            date=record.date,
+            timestamp=record.timestamp,
+            recognition_confidence=record.recognition_confidence,
+            liveness_score=record.liveness_score,
+            liveness_status=record.liveness_status,
+            status=record.status,
+            verification_method=record.verification_method,
+            review_status=record.review_status,
+        ))
+    return results
+
+
 @router.delete("/me", response_model=SuccessResponse, summary="Deregister the current student account")
 def deregister_my_account(
     req: DeregisterStudentRequest,
@@ -212,6 +265,49 @@ def update_student(student_id: int, req: StudentUpdateRequest, db: Session = Dep
     db.refresh(student)
 
     return _student_response(student)
+
+
+@router.delete(
+    "/{student_id}/face",
+    response_model=SuccessResponse,
+    summary="Administrator removes a student's enrolled face data",
+)
+def remove_student_face(
+    student_id: int,
+    subject_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
+    """Permanently erase face/voice biometrics for a student in the teacher's class.
+
+    The student is also removed from that subject so they cannot mark attendance
+    there. Their profile and historical attendance remain available for reports.
+    """
+    subject = db.query(Subject).filter(
+        Subject.subject_id == subject_id,
+        Subject.teacher_id == teacher.teacher_id,
+    ).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found or not managed by you.")
+
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    enrollment = db.query(SubjectStudent).filter(
+        SubjectStudent.subject_id == subject_id,
+        SubjectStudent.student_id == student_id,
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Student is not enrolled in this subject.")
+
+    db.delete(enrollment)
+    student.face_embedding = None
+    student.voice_embedding = None
+    db.commit()
+    invalidate_classifier_cache()
+    logger.info("Teacher %s removed face data for student %s", teacher.teacher_id, student_id)
+    return SuccessResponse(message="Face data erased and student removed from this subject. Attendance history was retained.")
 
 
 @router.post(

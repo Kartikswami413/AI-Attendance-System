@@ -9,8 +9,9 @@ GET  /api/enrollment/{subject_id}  — Get enrolled students for a subject
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from models.database import Subject, Student, SubjectStudent, get_db
+from models.database import Subject, Student, SubjectStudent, Teacher, get_db
 from models.schemas import SubjectEnrollRequest, SuccessResponse, ErrorResponse
+from services.auth import get_current_teacher
 
 router = APIRouter(prefix="/api/enrollment", tags=["Enrollment"])
 
@@ -24,10 +25,17 @@ router = APIRouter(prefix="/api/enrollment", tags=["Enrollment"])
         409: {"model": ErrorResponse, "description": "Already enrolled"},
     },
 )
-def enroll_student(req: SubjectEnrollRequest, db: Session = Depends(get_db)):
+def enroll_student(
+    req: SubjectEnrollRequest,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
     """Enroll a student in a subject using the subject code."""
     # Find subject by code
-    subject = db.query(Subject).filter(Subject.subject_code == req.subject_code).first()
+    subject = db.query(Subject).filter(
+        Subject.subject_code == req.subject_code,
+        Subject.teacher_id == teacher.teacher_id,
+    ).first()
     if not subject:
         raise HTTPException(status_code=404, detail=f"Subject with code '{req.subject_code}' not found.")
 
@@ -61,8 +69,19 @@ def enroll_student(req: SubjectEnrollRequest, db: Session = Depends(get_db)):
     response_model=SuccessResponse,
     summary="Unenroll a student from a subject",
 )
-def unenroll_student(student_id: int, subject_id: int, db: Session = Depends(get_db)):
+def unenroll_student(
+    student_id: int,
+    subject_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
     """Remove a student's enrollment from a subject."""
+    subject = db.query(Subject).filter(
+        Subject.subject_id == subject_id,
+        Subject.teacher_id == teacher.teacher_id,
+    ).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found or not managed by you.")
     enrollment = db.query(SubjectStudent).filter(
         SubjectStudent.subject_id == subject_id,
         SubjectStudent.student_id == student_id,
@@ -81,9 +100,16 @@ def unenroll_student(student_id: int, subject_id: int, db: Session = Depends(get
     "/{subject_id}/students",
     summary="Get all students enrolled in a subject",
 )
-def get_enrolled_students(subject_id: int, db: Session = Depends(get_db)):
+def get_enrolled_students(
+    subject_id: int,
+    teacher: Teacher = Depends(get_current_teacher),
+    db: Session = Depends(get_db),
+):
     """List all students enrolled in a specific subject."""
-    subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+    subject = db.query(Subject).filter(
+        Subject.subject_id == subject_id,
+        Subject.teacher_id == teacher.teacher_id,
+    ).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found.")
 
